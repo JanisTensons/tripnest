@@ -1,5 +1,10 @@
 import { describe, expect, it } from "@jest/globals";
-import { optimizeItinerary, type Activity } from "./itinerary-optimization";
+import {
+  findScheduleConflicts,
+  optimizeItinerary,
+  suggestConflictResolution,
+  type Activity,
+} from "./itinerary-optimization";
 
 const activities: Activity[] = [
   {
@@ -161,5 +166,92 @@ describe("optimizeItinerary", () => {
     const times = result.activities.map((activity) => activity.time);
 
     expect(times).toEqual([...times].sort());
+  });
+
+  it("detects overlapping activities using their durations", () => {
+    const scheduledActivities: Activity[] = [
+      {
+        time: "10:30",
+        title: "Vasa Museum",
+        type: "Attraction",
+        icon: "🏛️",
+        durationMinutes: 120,
+      },
+      {
+        time: "12:00",
+        title: "Lunch",
+        type: "Food",
+        icon: "🍽️",
+        durationMinutes: 60,
+      },
+    ];
+
+    const conflicts = findScheduleConflicts(scheduledActivities);
+
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]).toEqual({
+      firstActivity: "Vasa Museum",
+      secondActivity: "Lunch",
+      firstEndsAt: "12:30",
+      secondStartsAt: "12:00",
+    });
+  });
+
+  it("suggests moving the next activity to the previous activity's end", () => {
+    const scheduledActivities: Activity[] = [
+      {
+        time: "10:30",
+        title: "Vasa Museum",
+        type: "Attraction",
+        icon: "🏛️",
+        durationMinutes: 120,
+      },
+      {
+        time: "12:00",
+        title: "Lunch",
+        type: "Food",
+        icon: "🍽️",
+        durationMinutes: 60,
+      },
+    ];
+
+    const conflicts = findScheduleConflicts(scheduledActivities);
+
+    const suggested = suggestConflictResolution(
+      scheduledActivities,
+      conflicts[0],
+    );
+
+    expect(suggested.find((activity) => activity.title === "Lunch")?.time).toBe(
+      "12:30",
+    );
+
+    expect(scheduledActivities[1].time).toBe("12:00");
+  });
+  it("detects overlapping activities", () => {
+    const activities: Activity[] = [
+      {
+        time: "10:30",
+        title: "Vasa Museum",
+        type: "Attraction",
+        icon: "🏛️",
+        durationMinutes: 120,
+      },
+      {
+        time: "11:30",
+        title: "Junibacken",
+        type: "Kids activity",
+        icon: "🎠",
+      },
+    ];
+
+    expect(findScheduleConflicts(activities)).toEqual([
+      {
+        firstActivity: "Vasa Museum",
+        secondActivity: "Junibacken",
+        firstEndsAt: "12:30",
+        secondStartsAt: "11:30",
+      },
+    ]);
   });
 });

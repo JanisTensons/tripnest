@@ -3,6 +3,7 @@ export type Activity = {
   title: string;
   type: string;
   icon: string;
+  durationMinutes?: number;
   optional?: boolean;
   requiresTravel?: boolean;
   priority?: "required" | "important" | "optional";
@@ -211,4 +212,105 @@ export function optimizeItinerary(
     newlyRemovedActivity,
     message,
   };
+}
+
+export type ScheduleConflict = {
+  firstActivity: string;
+  secondActivity: string;
+  firstEndsAt: string;
+  secondStartsAt: string;
+};
+
+function timeToMinutes(time: string): number | null {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+
+  if (!match) {
+    return null;
+  }
+
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function minutesToTime(minutes: number): string {
+  const normalized = ((minutes % 1440) + 1440) % 1440;
+  const hours = Math.floor(normalized / 60);
+  const mins = normalized % 60;
+
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+}
+
+export function findScheduleConflicts(
+  activities: Activity[],
+): ScheduleConflict[] {
+  const scheduled = activities
+    .map((activity) => ({
+      activity,
+      start: timeToMinutes(activity.time),
+    }))
+    .filter(
+      (
+        item,
+      ): item is {
+        activity: Activity;
+        start: number;
+      } => item.start !== null,
+    )
+    .sort((a, b) => a.start - b.start);
+
+  const conflicts: ScheduleConflict[] = [];
+
+  for (let i = 0; i < scheduled.length - 1; i++) {
+    const current = scheduled[i];
+    const next = scheduled[i + 1];
+
+    if (
+      current.activity.durationMinutes === undefined ||
+      current.activity.durationMinutes <= 0
+    ) {
+      continue;
+    }
+
+    const end = current.start + current.activity.durationMinutes;
+
+    if (end > next.start) {
+      conflicts.push({
+        firstActivity: current.activity.title,
+        secondActivity: next.activity.title,
+        firstEndsAt: minutesToTime(end),
+        secondStartsAt: next.activity.time,
+      });
+    }
+  }
+
+  return conflicts;
+}
+
+export function suggestConflictResolution(
+  activities: Activity[],
+  conflict: ScheduleConflict,
+): Activity[] {
+  const firstActivity = activities.find(
+    (activity) => activity.title === conflict.firstActivity,
+  );
+
+  const nextStart = firstActivity ? timeToMinutes(firstActivity.time) : null;
+
+  if (
+    !firstActivity ||
+    nextStart === null ||
+    firstActivity.durationMinutes === undefined ||
+    firstActivity.durationMinutes <= 0
+  ) {
+    return activities.map((activity) => ({ ...activity }));
+  }
+
+  const suggestedTime = minutesToTime(
+    nextStart + firstActivity.durationMinutes,
+  );
+
+  return activities.map((activity) =>
+    activity.title === conflict.secondActivity
+      ? { ...activity, time: suggestedTime }
+      : { ...activity },
+  );
 }

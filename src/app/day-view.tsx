@@ -10,7 +10,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  findScheduleConflicts,
   optimizeItinerary,
+  suggestConflictResolution,
   type Activity,
   type OptimizationGoal,
 } from "../utils/itinerary-optimization";
@@ -112,6 +114,7 @@ export default function DayViewScreen() {
           title: "Vasa Museum",
           type: "Attraction",
           icon: "🏛️",
+          durationMinutes: 120,
           priority: "important",
         },
         {
@@ -180,6 +183,9 @@ export default function DayViewScreen() {
   const [updatedActivities, setUpdatedActivities] = useState<Activity[] | null>(
     null,
   );
+  const scheduleConflicts = findScheduleConflicts(
+    updatedActivities ?? currentDay.activities,
+  );
 
   const [optimizationMessage, setOptimizationMessage] = useState("");
 
@@ -216,6 +222,20 @@ export default function DayViewScreen() {
     });
 
     setUpdatedActivities(result.activities);
+    setOptimized(true);
+  }
+
+  function applyConflictSuggestion(
+    conflict: (typeof scheduleConflicts)[number],
+  ) {
+    const currentActivities = updatedActivities ?? currentDay.activities;
+
+    const suggestedActivities = suggestConflictResolution(
+      currentActivities,
+      conflict,
+    );
+
+    setUpdatedActivities(suggestedActivities);
     setOptimized(true);
   }
 
@@ -259,6 +279,84 @@ export default function DayViewScreen() {
         </View>
 
         <Text style={styles.sectionTitle}>Your day</Text>
+
+        {scheduleConflicts.length > 0 && (
+          <View
+            style={{
+              backgroundColor: "#FEF3C7",
+              borderColor: "#F59E0B",
+              borderWidth: 1,
+              borderRadius: 12,
+              padding: 14,
+              marginBottom: 16,
+            }}
+          >
+            <Text
+              style={{
+                color: "#92400E",
+                fontSize: 15,
+                fontWeight: "700",
+                marginBottom: 6,
+              }}
+            >
+              ⚠️ Schedule conflict
+            </Text>
+
+            {scheduleConflicts.map((conflict, index) => {
+              const suggestedActivities = suggestConflictResolution(
+                updatedActivities ?? currentDay.activities,
+                conflict,
+              );
+
+              const suggestedTime = suggestedActivities.find(
+                (activity) => activity.title === conflict.secondActivity,
+              )?.time;
+
+              return (
+                <View
+                  key={`${conflict.firstActivity}-${conflict.secondActivity}-${index}`}
+                  style={{ marginBottom: 12 }}
+                >
+                  <Text
+                    style={{
+                      color: "#92400E",
+                      fontSize: 14,
+                      lineHeight: 20,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {conflict.firstActivity} ends at {conflict.firstEndsAt}, but{" "}
+                    {conflict.secondActivity} starts at{" "}
+                    {conflict.secondStartsAt}.
+                  </Text>
+
+                  {suggestedTime &&
+                    suggestedTime !== conflict.secondStartsAt && (
+                      <TouchableOpacity
+                        style={{
+                          backgroundColor: "#92400E",
+                          borderRadius: 8,
+                          paddingVertical: 10,
+                          paddingHorizontal: 12,
+                          alignSelf: "flex-start",
+                        }}
+                        onPress={() => applyConflictSuggestion(conflict)}
+                      >
+                        <Text
+                          style={{
+                            color: "#FFFFFF",
+                            fontWeight: "600",
+                          }}
+                        >
+                          Move {conflict.secondActivity} to {suggestedTime}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                </View>
+              );
+            })}
+          </View>
+        )}
 
         <View style={styles.timeline}>
           {displayedActivities.map((activity, index) => (
