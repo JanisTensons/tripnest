@@ -9,6 +9,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+type Activity = {
+  time: string;
+  title: string;
+  type: string;
+  icon: string;
+};
+
 export default function DayViewScreen() {
   const { day } = useLocalSearchParams<{
     day?: string;
@@ -150,6 +157,94 @@ export default function DayViewScreen() {
 
   const currentDay = days[dayNumber - 1] ?? days[0];
 
+  const [updatedActivities, setUpdatedActivities] = useState<Activity[] | null>(
+    null,
+  );
+
+  const [optimizationMessage, setOptimizationMessage] = useState("");
+
+  const displayedActivities = updatedActivities ?? currentDay.activities;
+
+  function applyOptimization() {
+    if (!selectedGoal) return;
+
+    let activities: Activity[] = currentDay.activities.map((activity) => ({
+      ...activity,
+    }));
+
+    switch (selectedGoal) {
+      case "less-driving":
+        activities = activities.filter(
+          (activity) => activity.type !== "Travel" || activity.time !== "12:00",
+        );
+
+        setOptimizationMessage(
+          "Your plan now has fewer scheduled stops. Actual driving time has not been recalculated.",
+        );
+        break;
+
+      case "kids":
+        activities.push({
+          time: "15:30",
+          title: "Family playground break",
+          type: "Kids activity",
+          icon: "🛝",
+        });
+
+        activities.sort((a, b) => a.time.localeCompare(b.time));
+
+        setOptimizationMessage(
+          "A family-friendly activity has been added to your plan.",
+        );
+        break;
+
+      case "cheaper":
+        activities = activities.map((activity) =>
+          activity.title === "Dinner in Gamla Stan"
+            ? {
+                time: activity.time,
+                title: "Budget-friendly picnic dinner",
+                type: "Food",
+                icon: "🥪",
+              }
+            : activity,
+        );
+
+        setOptimizationMessage(
+          "The plan now suggests a picnic instead of the restaurant dinner, where applicable.",
+        );
+        break;
+
+      case "nature":
+        activities.push({
+          time: "15:30",
+          title: "Nature walk in a nearby park",
+          type: "Nature",
+          icon: "🌲",
+        });
+
+        activities.sort((a, b) => a.time.localeCompare(b.time));
+
+        setOptimizationMessage(
+          "A nature walk has been added. Check the timing and location before your trip.",
+        );
+        break;
+
+      case "relaxed":
+        if (activities.length > 3) {
+          activities = activities.slice(0, -1);
+        }
+
+        setOptimizationMessage(
+          "One scheduled activity has been removed where possible, leaving more free time.",
+        );
+        break;
+    }
+
+    setUpdatedActivities(activities);
+    setOptimized(true);
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -192,7 +287,7 @@ export default function DayViewScreen() {
         <Text style={styles.sectionTitle}>Your day</Text>
 
         <View style={styles.timeline}>
-          {currentDay.activities.map((activity, index) => (
+          {displayedActivities.map((activity, index) => (
             <View
               key={`${activity.time}-${activity.title}`}
               style={styles.timelineRow}
@@ -288,7 +383,7 @@ export default function DayViewScreen() {
                 !selectedGoal && styles.applyButtonDisabled,
               ]}
               disabled={!selectedGoal}
-              onPress={() => setOptimized(true)}
+              onPress={applyOptimization}
             >
               <Text style={styles.applyButtonText}>✨ Apply improvement</Text>
             </TouchableOpacity>
@@ -296,17 +391,9 @@ export default function DayViewScreen() {
             {optimized && (
               <View style={styles.resultCard}>
                 <Text style={styles.resultTitle}>
-                  ✓ Your preference is selected!
+                  ✓ Your day plan has been updated
                 </Text>
-                <Text style={styles.resultText}>
-                  {
-                    optimizationOptions.find(
-                      (option) => option.id === selectedGoal,
-                    )?.title
-                  }
-                  {" — "}this preference is ready to be used when generating an
-                  updated itinerary.
-                </Text>
+                <Text style={styles.resultText}>{optimizationMessage}</Text>
                 <Text style={styles.resultNote}>
                   This is a UI prototype. The itinerary has not yet been changed
                   by AI.
