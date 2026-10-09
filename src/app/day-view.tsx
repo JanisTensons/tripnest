@@ -9,16 +9,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type Activity = {
-  time: string;
-  title: string;
-  type: string;
-  icon: string;
-  optional?: boolean;
-  requiresTravel?: boolean;
-  priority?: "required" | "important" | "optional";
-  source?: "original" | "optimization";
-};
+import {
+  optimizeItinerary,
+  type Activity,
+  type OptimizationGoal,
+} from "../utils/itinerary-optimization";
 
 type Day = {
   date: string;
@@ -193,259 +188,34 @@ export default function DayViewScreen() {
   function applyOptimization() {
     if (!selectedGoal) return;
 
-    const previousActivities = (updatedActivities ?? currentDay.activities).map(
-      (activity) => ({ ...activity }),
+    const result = optimizeItinerary(
+      updatedActivities ?? currentDay.activities,
+      selectedGoal as OptimizationGoal,
+      dayNumber,
     );
 
-    let activities: Activity[] = previousActivities.map((activity) => ({
-      ...activity,
-    }));
-
-    let newlyRemovedActivity: Activity | null = null;
-
-    switch (selectedGoal) {
-      case "less-driving": {
-        const optionalTravelIndex = activities.findIndex(
-          (activity) =>
-            activity.priority === "optional" &&
-            activity.optional === true &&
-            activity.requiresTravel === true &&
-            !["Travel", "Transport"].includes(activity.type),
-        );
-
-        if (optionalTravelIndex !== -1) {
-          const removedActivity = activities[optionalTravelIndex];
-
-          newlyRemovedActivity = { ...removedActivity };
-
-          activities = activities.filter(
-            (_, index) => index !== optionalTravelIndex,
-          );
-
-          setOptimizationMessage(
-            `"${removedActivity.title}" was removed because it requires additional travel. Check the revised route and travel time before your trip.`,
-          );
-        } else {
-          setOptimizationMessage(
-            "No optional extra-travel stops are identified for this day. Your itinerary has been kept unchanged.",
-          );
-        }
-
-        break;
-      }
-
-      case "kids": {
-        const alreadyHasKidsActivity = activities.some(
-          (activity) => activity.type === "Kids activity",
-        );
-
-        if (alreadyHasKidsActivity) {
-          setOptimizationMessage(
-            "This day already includes a kids activity. Keep it in your plan and allow enough time for the family to enjoy it.",
-          );
-        } else if (dayNumber === 1) {
-          activities.push({
-            time: "20:00",
-            title: "Family games on board",
-            type: "Kids activity",
-            icon: "🎲",
-            optional: true,
-            priority: "optional",
-            source: "optimization",
-          });
-
-          activities.sort((a, b) => a.time.localeCompare(b.time));
-
-          setOptimizationMessage(
-            "A family-friendly activity has been added for the ferry journey.",
-          );
-        } else {
-          activities.push({
-            time: "15:30",
-            title: "Family playground break",
-            type: "Kids activity",
-            icon: "🛝",
-            optional: true,
-            priority: "optional",
-            source: "optimization",
-          });
-
-          activities.sort((a, b) => a.time.localeCompare(b.time));
-
-          setOptimizationMessage(
-            "A family-friendly activity has been added to your plan. Check travel time and opening hours before your trip.",
-          );
-        }
-
-        break;
-      }
-
-      case "cheaper": {
-        const alreadyHasBudgetTip = activities.some(
-          (activity) =>
-            activity.type === "Budget tip" ||
-            activity.title.toLowerCase().includes("budget-friendly picnic"),
-        );
-
-        if (alreadyHasBudgetTip) {
-          setOptimizationMessage(
-            "Your plan already includes a budget-friendly suggestion. No additional change was made.",
-          );
-          break;
-        }
-
-        const mealIndex = activities.findIndex(
-          (activity) =>
-            activity.type === "Food" &&
-            (activity.title.toLowerCase().includes("dinner") ||
-              activity.title.toLowerCase().includes("lunch")),
-        );
-
-        if (mealIndex !== -1) {
-          const originalActivity = activities[mealIndex];
-
-          activities[mealIndex] = {
-            ...originalActivity,
-            title: originalActivity.title.toLowerCase().includes("lunch")
-              ? "Budget-friendly picnic lunch"
-              : "Budget-friendly picnic dinner",
-            icon: "🥪",
-            source: "optimization",
-          };
-
-          setOptimizationMessage(
-            `"${originalActivity.title}" was changed to "${activities[mealIndex].title}". This is a budget-friendly alternative; actual savings have not been calculated.`,
-          );
-        } else {
-          activities.push({
-            time: "12:30",
-            title: "Bring your own snacks and drinks",
-            type: "Budget tip",
-            icon: "💰",
-            optional: true,
-            priority: "optional",
-            source: "optimization",
-          });
-
-          activities.sort((a, b) => a.time.localeCompare(b.time));
-
-          setOptimizationMessage(
-            "A budget tip has been added. Bringing your own snacks and drinks may help reduce food costs.",
-          );
-        }
-
-        break;
-      }
-
-      case "nature": {
-        const alreadyHasNature = activities.some(
-          (activity) => activity.type === "Nature",
-        );
-
-        if (alreadyHasNature) {
-          setOptimizationMessage(
-            "Your plan already includes a nature activity. Keep it and allow enough time to enjoy the outdoors.",
-          );
-        } else if (dayNumber === 1) {
-          activities.push({
-            time: "20:00",
-            title: "Relax on deck and enjoy the sea views",
-            type: "Nature",
-            icon: "🌊",
-            optional: true,
-            priority: "optional",
-            source: "optimization",
-          });
-
-          activities.sort((a, b) => a.time.localeCompare(b.time));
-
-          setOptimizationMessage(
-            "A sea-view break has been added to your ferry day.",
-          );
-        } else if (dayNumber === 2) {
-          activities.push({
-            time: "15:30",
-            title: "Relaxing walk in a Stockholm park",
-            type: "Nature",
-            icon: "🌳",
-            optional: true,
-            priority: "optional",
-            source: "optimization",
-          });
-
-          activities.sort((a, b) => a.time.localeCompare(b.time));
-
-          setOptimizationMessage(
-            "A nature break has been added to your Stockholm day. Check the location and travel time before your trip.",
-          );
-        } else {
-          activities.push({
-            time: "14:00",
-            title: "Scenic nature break along the route",
-            type: "Nature",
-            icon: "🌲",
-            optional: true,
-            requiresTravel: true,
-            priority: "optional",
-            source: "optimization",
-          });
-
-          activities.sort((a, b) => a.time.localeCompare(b.time));
-
-          setOptimizationMessage(
-            "A nature break has been added to your road-trip plan. Confirm that the stop fits your route before travelling.",
-          );
-        }
-
-        break;
-      }
-
-      case "relaxed": {
-        const optionalIndex = activities.findLastIndex(
-          (activity) =>
-            activity.priority === "optional" &&
-            activity.optional === true &&
-            !["Travel", "Transport"].includes(activity.type) &&
-            !activity.title.toLowerCase().includes("arrive") &&
-            !activity.title.toLowerCase().includes("depart"),
-        );
-
-        if (optionalIndex !== -1) {
-          const removedActivity = activities[optionalIndex];
-
-          newlyRemovedActivity = { ...removedActivity };
-
-          activities = activities.filter((_, index) => index !== optionalIndex);
-
-          setOptimizationMessage(
-            `"${removedActivity.title}" was removed to create more free time. Required travel, important activities and meal breaks have been preserved.`,
-          );
-        } else {
-          setOptimizationMessage(
-            "No activities marked as optional can be removed. Your current itinerary has been preserved.",
-          );
-        }
-
-        break;
-      }
-    }
+    setOptimizationMessage(result.message);
 
     setRemovedActivities((previous) => {
-      const combined = newlyRemovedActivity
-        ? [...previous, newlyRemovedActivity]
+      const combined = result.newlyRemovedActivity
+        ? [...previous, result.newlyRemovedActivity]
         : previous;
 
       return combined.filter(
-        (removed) =>
-          !activities.some(
+        (removed, index, allRemoved) =>
+          !result.activities.some(
             (activity) =>
               activity.time === removed.time &&
               activity.title === removed.title,
-          ),
+          ) &&
+          allRemoved.findIndex(
+            (item) =>
+              item.time === removed.time && item.title === removed.title,
+          ) === index,
       );
     });
 
-    setUpdatedActivities(activities);
+    setUpdatedActivities(result.activities);
     setOptimized(true);
   }
 
