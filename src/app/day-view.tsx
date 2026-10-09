@@ -14,6 +14,16 @@ type Activity = {
   title: string;
   type: string;
   icon: string;
+  optional?: boolean;
+  requiresTravel?: boolean;
+  source?: "original" | "optimization";
+};
+
+type Day = {
+  date: string;
+  route: string;
+  driving: string;
+  activities: Activity[];
 };
 
 export default function DayViewScreen() {
@@ -25,6 +35,7 @@ export default function DayViewScreen() {
   const [showOptimization, setShowOptimization] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
   const [optimized, setOptimized] = useState(false);
+  const [removedActivities, setRemovedActivities] = useState<Activity[]>([]);
 
   const optimizationOptions = [
     {
@@ -59,7 +70,7 @@ export default function DayViewScreen() {
     },
   ];
 
-  const days = [
+  const days: Day[] = [
     {
       date: "15 June",
       route: "Riga → Stockholm",
@@ -138,6 +149,7 @@ export default function DayViewScreen() {
           title: "Family lunch stop",
           type: "Food",
           icon: "🍔",
+          optional: true,
         },
         {
           time: "16:30",
@@ -168,27 +180,38 @@ export default function DayViewScreen() {
   function applyOptimization() {
     if (!selectedGoal) return;
 
-    let activities: Activity[] = currentDay.activities.map((activity) => ({
-      ...activity,
-    }));
+    let activities: Activity[] = (
+      updatedActivities ?? currentDay.activities
+    ).map((activity) => ({ ...activity }));
 
     switch (selectedGoal) {
       case "less-driving": {
-        if (dayNumber === 1) {
-          setOptimizationMessage(
-            "This day is centred around the ferry journey. Keep the ferry schedule unchanged and avoid adding extra travel stops.",
+        const optionalTravelIndex = activities.findIndex(
+          (activity) =>
+            activity.optional === true && activity.requiresTravel === true,
+        );
+
+        if (optionalTravelIndex !== -1) {
+          const removedActivity = activities[optionalTravelIndex];
+          setRemovedActivities((previous) => [
+            ...previous,
+            { ...removedActivity },
+          ]);
+
+          activities = activities.filter(
+            (_, index) => index !== optionalTravelIndex,
           );
-        } else if (dayNumber === 2) {
-          setOptimizationMessage(
-            "Group nearby Stockholm attractions together and choose activities close to each other to reduce driving around the city.",
+
+          activities = activities.filter(
+            (_, index) => index !== optionalTravelIndex,
           );
-        } else if (dayNumber === 3) {
+
           setOptimizationMessage(
-            "The Stockholm–Gothenburg drive is approximately 4 h 50 min. Keep the route direct and check whether any optional stops can be skipped. Actual driving time has not been recalculated.",
+            `"${removedActivity.title}" was removed to reduce optional travel. Check that the revised route still works for your family.`,
           );
         } else {
           setOptimizationMessage(
-            "Keep the route direct and avoid unnecessary stops. Actual driving time has not been recalculated.",
+            "No optional stops requiring extra travel are identified for this day. The itinerary has been kept unchanged.",
           );
         }
 
@@ -210,6 +233,8 @@ export default function DayViewScreen() {
             title: "Family games on board",
             type: "Kids activity",
             icon: "🎲",
+            optional: true,
+            source: "optimization",
           });
 
           activities.sort((a, b) => a.time.localeCompare(b.time));
@@ -223,6 +248,8 @@ export default function DayViewScreen() {
             title: "Family playground break",
             type: "Kids activity",
             icon: "🛝",
+            optional: true,
+            source: "optimization",
           });
 
           activities.sort((a, b) => a.time.localeCompare(b.time));
@@ -236,26 +263,40 @@ export default function DayViewScreen() {
       }
 
       case "cheaper": {
-        const dinnerIndex = activities.findIndex(
+        const alreadyHasBudgetTip = activities.some(
+          (activity) =>
+            activity.type === "Budget tip" ||
+            activity.title.toLowerCase().includes("budget-friendly picnic"),
+        );
+
+        if (alreadyHasBudgetTip) {
+          setOptimizationMessage(
+            "Your plan already includes a budget-friendly suggestion. No additional change was made.",
+          );
+          break;
+        }
+
+        const mealIndex = activities.findIndex(
           (activity) =>
             activity.type === "Food" &&
             (activity.title.toLowerCase().includes("dinner") ||
               activity.title.toLowerCase().includes("lunch")),
         );
 
-        if (dinnerIndex !== -1) {
-          const originalActivity = activities[dinnerIndex];
+        if (mealIndex !== -1) {
+          const originalActivity = activities[mealIndex];
 
-          activities[dinnerIndex] = {
+          activities[mealIndex] = {
             ...originalActivity,
             title: originalActivity.title.toLowerCase().includes("lunch")
               ? "Budget-friendly picnic lunch"
               : "Budget-friendly picnic dinner",
             icon: "🥪",
+            source: "optimization",
           };
 
           setOptimizationMessage(
-            "A meal has been replaced with a budget-friendly picnic suggestion. Actual savings have not been calculated.",
+            "A meal suggestion was changed to a budget-friendly picnic. Actual savings have not been calculated.",
           );
         } else {
           activities.push({
@@ -263,6 +304,8 @@ export default function DayViewScreen() {
             title: "Bring your own snacks and drinks",
             type: "Budget tip",
             icon: "💰",
+            optional: true,
+            source: "optimization",
           });
 
           activities.sort((a, b) => a.time.localeCompare(b.time));
@@ -290,6 +333,8 @@ export default function DayViewScreen() {
             title: "Relax on deck and enjoy the sea views",
             type: "Nature",
             icon: "🌊",
+            optional: true,
+            source: "optimization",
           });
 
           activities.sort((a, b) => a.time.localeCompare(b.time));
@@ -303,6 +348,8 @@ export default function DayViewScreen() {
             title: "Relaxing walk in a Stockholm park",
             type: "Nature",
             icon: "🌳",
+            optional: true,
+            source: "optimization",
           });
 
           activities.sort((a, b) => a.time.localeCompare(b.time));
@@ -316,6 +363,9 @@ export default function DayViewScreen() {
             title: "Scenic nature break along the route",
             type: "Nature",
             icon: "🌲",
+            optional: true,
+            requiresTravel: true,
+            source: "optimization",
           });
 
           activities.sort((a, b) => a.time.localeCompare(b.time));
@@ -329,9 +379,32 @@ export default function DayViewScreen() {
       }
 
       case "relaxed": {
-        setOptimizationMessage(
-          "Your plan keeps its main activities and meal breaks. To make the day more relaxed, leave extra free time between activities and avoid adding optional stops.",
+        const optionalIndex = activities.findLastIndex(
+          (activity) =>
+            activity.optional === true &&
+            !["Travel", "Transport"].includes(activity.type) &&
+            !activity.title.toLowerCase().includes("arrive") &&
+            !activity.title.toLowerCase().includes("depart"),
         );
+
+        if (optionalIndex !== -1) {
+          const removedActivity = activities[optionalIndex];
+
+          setRemovedActivities((previous) => [
+            ...previous,
+            { ...removedActivity },
+          ]);
+
+          activities = activities.filter((_, index) => index !== optionalIndex);
+
+          setOptimizationMessage(
+            `"${removedActivity.title}" was removed to create more free time. Your main activities and meal breaks have been preserved.`,
+          );
+        } else {
+          setOptimizationMessage(
+            "No optional activities are marked for removal. Your current itinerary has been preserved.",
+          );
+        }
 
         break;
       }
@@ -409,6 +482,12 @@ export default function DayViewScreen() {
 
                 <Text style={styles.activityTitle}>{activity.title}</Text>
 
+                {activity.source === "optimization" && (
+                  <Text style={styles.optimizationLabel}>
+                    ✨ Added by optimization
+                  </Text>
+                )}
+
                 <TouchableOpacity>
                   <Text style={styles.details}>View details →</Text>
                 </TouchableOpacity>
@@ -416,6 +495,22 @@ export default function DayViewScreen() {
             </View>
           ))}
         </View>
+        {removedActivities.length > 0 && (
+          <View style={styles.removedSection}>
+            <Text style={styles.removedTitle}>Removed by optimization</Text>
+
+            {removedActivities.map((activity, index) => (
+              <View
+                key={`${activity.time}-${activity.title}-${index}`}
+                style={styles.removedActivity}
+              >
+                <Text style={styles.removedActivityText}>
+                  {activity.icon} {activity.time} · {activity.title}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         <TouchableOpacity
           style={styles.changeButton}
@@ -453,6 +548,7 @@ export default function DayViewScreen() {
                   onPress={() => {
                     setSelectedGoal(option.id);
                     setOptimized(false);
+                    setOptimizationMessage("");
                   }}
                 >
                   <Text style={styles.optimizationIcon}>{option.icon}</Text>
@@ -483,6 +579,21 @@ export default function DayViewScreen() {
             >
               <Text style={styles.applyButtonText}>✨ Apply improvement</Text>
             </TouchableOpacity>
+
+            {updatedActivities !== null && (
+              <TouchableOpacity
+                style={styles.applyButton}
+                onPress={() => {
+                  setUpdatedActivities(null);
+                  setOptimized(false);
+                  setOptimizationMessage("");
+                  setSelectedGoal(null);
+                  setRemovedActivities([]);
+                }}
+              >
+                <Text style={styles.applyButtonText}>↺ Reset plan</Text>
+              </TouchableOpacity>
+            )}
 
             {optimized && (
               <View style={styles.resultCard}>
@@ -813,5 +924,30 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: "#6B7280",
     marginTop: 8,
+  },
+  optimizationLabel: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 6,
+  },
+  removedSection: {
+    marginTop: 20,
+    padding: 14,
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+  },
+  removedTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#64748b",
+    marginBottom: 10,
+  },
+  removedActivity: {
+    paddingVertical: 6,
+  },
+  removedActivityText: {
+    fontSize: 13,
+    color: "#64748b",
+    textDecorationLine: "line-through",
   },
 });
