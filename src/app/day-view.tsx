@@ -16,6 +16,7 @@ type Activity = {
   icon: string;
   optional?: boolean;
   requiresTravel?: boolean;
+  priority?: "required" | "important" | "optional";
   source?: "original" | "optimization";
 };
 
@@ -81,18 +82,21 @@ export default function DayViewScreen() {
           title: "Check-in at ferry",
           type: "Transport",
           icon: "⛴️",
+          priority: "required",
         },
         {
           time: "16:30",
           title: "Depart Riga",
           type: "Travel",
           icon: "🚢",
+          priority: "required",
         },
         {
           time: "19:00",
           title: "Family dinner",
           type: "Food",
           icon: "🍽️",
+          priority: "important",
         },
       ],
     },
@@ -106,24 +110,28 @@ export default function DayViewScreen() {
           title: "Breakfast",
           type: "Food",
           icon: "🥐",
+          priority: "important",
         },
         {
           time: "10:30",
           title: "Vasa Museum",
           type: "Attraction",
           icon: "🏛️",
+          priority: "important",
         },
         {
           time: "14:00",
           title: "Junibacken",
           type: "Kids activity",
           icon: "🎠",
+          priority: "important",
         },
         {
           time: "18:00",
           title: "Dinner in Gamla Stan",
           type: "Food",
           icon: "🍝",
+          priority: "important",
         },
       ],
     },
@@ -137,12 +145,14 @@ export default function DayViewScreen() {
           title: "Breakfast & check-out",
           type: "Food",
           icon: "🥐",
+          priority: "important",
         },
         {
           time: "09:30",
           title: "Start road trip",
           type: "Travel",
           icon: "🚗",
+          priority: "required",
         },
         {
           time: "12:00",
@@ -150,18 +160,21 @@ export default function DayViewScreen() {
           type: "Food",
           icon: "🍔",
           optional: true,
+          priority: "optional",
         },
         {
           time: "16:30",
           title: "Arrive in Gothenburg",
           type: "Travel",
           icon: "📍",
+          priority: "required",
         },
         {
           time: "18:00",
           title: "Liseberg",
           type: "Kids activity",
           icon: "🎢",
+          priority: "important",
         },
       ],
     },
@@ -180,38 +193,41 @@ export default function DayViewScreen() {
   function applyOptimization() {
     if (!selectedGoal) return;
 
-    let activities: Activity[] = (
-      updatedActivities ?? currentDay.activities
-    ).map((activity) => ({ ...activity }));
+    const previousActivities = (updatedActivities ?? currentDay.activities).map(
+      (activity) => ({ ...activity }),
+    );
+
+    let activities: Activity[] = previousActivities.map((activity) => ({
+      ...activity,
+    }));
+
+    let newlyRemovedActivity: Activity | null = null;
 
     switch (selectedGoal) {
       case "less-driving": {
         const optionalTravelIndex = activities.findIndex(
           (activity) =>
-            activity.optional === true && activity.requiresTravel === true,
+            activity.priority === "optional" &&
+            activity.optional === true &&
+            activity.requiresTravel === true &&
+            !["Travel", "Transport"].includes(activity.type),
         );
 
         if (optionalTravelIndex !== -1) {
           const removedActivity = activities[optionalTravelIndex];
-          setRemovedActivities((previous) => [
-            ...previous,
-            { ...removedActivity },
-          ]);
 
-          activities = activities.filter(
-            (_, index) => index !== optionalTravelIndex,
-          );
+          newlyRemovedActivity = { ...removedActivity };
 
           activities = activities.filter(
             (_, index) => index !== optionalTravelIndex,
           );
 
           setOptimizationMessage(
-            `"${removedActivity.title}" was removed to reduce optional travel. Check that the revised route still works for your family.`,
+            `"${removedActivity.title}" was removed because it requires additional travel. Check the revised route and travel time before your trip.`,
           );
         } else {
           setOptimizationMessage(
-            "No optional stops requiring extra travel are identified for this day. The itinerary has been kept unchanged.",
+            "No optional extra-travel stops are identified for this day. Your itinerary has been kept unchanged.",
           );
         }
 
@@ -234,6 +250,7 @@ export default function DayViewScreen() {
             type: "Kids activity",
             icon: "🎲",
             optional: true,
+            priority: "optional",
             source: "optimization",
           });
 
@@ -249,6 +266,7 @@ export default function DayViewScreen() {
             type: "Kids activity",
             icon: "🛝",
             optional: true,
+            priority: "optional",
             source: "optimization",
           });
 
@@ -296,7 +314,7 @@ export default function DayViewScreen() {
           };
 
           setOptimizationMessage(
-            "A meal suggestion was changed to a budget-friendly picnic. Actual savings have not been calculated.",
+            `"${originalActivity.title}" was changed to "${activities[mealIndex].title}". This is a budget-friendly alternative; actual savings have not been calculated.`,
           );
         } else {
           activities.push({
@@ -305,6 +323,7 @@ export default function DayViewScreen() {
             type: "Budget tip",
             icon: "💰",
             optional: true,
+            priority: "optional",
             source: "optimization",
           });
 
@@ -334,6 +353,7 @@ export default function DayViewScreen() {
             type: "Nature",
             icon: "🌊",
             optional: true,
+            priority: "optional",
             source: "optimization",
           });
 
@@ -349,6 +369,7 @@ export default function DayViewScreen() {
             type: "Nature",
             icon: "🌳",
             optional: true,
+            priority: "optional",
             source: "optimization",
           });
 
@@ -365,6 +386,7 @@ export default function DayViewScreen() {
             icon: "🌲",
             optional: true,
             requiresTravel: true,
+            priority: "optional",
             source: "optimization",
           });
 
@@ -381,6 +403,7 @@ export default function DayViewScreen() {
       case "relaxed": {
         const optionalIndex = activities.findLastIndex(
           (activity) =>
+            activity.priority === "optional" &&
             activity.optional === true &&
             !["Travel", "Transport"].includes(activity.type) &&
             !activity.title.toLowerCase().includes("arrive") &&
@@ -390,25 +413,37 @@ export default function DayViewScreen() {
         if (optionalIndex !== -1) {
           const removedActivity = activities[optionalIndex];
 
-          setRemovedActivities((previous) => [
-            ...previous,
-            { ...removedActivity },
-          ]);
+          newlyRemovedActivity = { ...removedActivity };
 
           activities = activities.filter((_, index) => index !== optionalIndex);
 
           setOptimizationMessage(
-            `"${removedActivity.title}" was removed to create more free time. Your main activities and meal breaks have been preserved.`,
+            `"${removedActivity.title}" was removed to create more free time. Required travel, important activities and meal breaks have been preserved.`,
           );
         } else {
           setOptimizationMessage(
-            "No optional activities are marked for removal. Your current itinerary has been preserved.",
+            "No activities marked as optional can be removed. Your current itinerary has been preserved.",
           );
         }
 
         break;
       }
     }
+
+    setRemovedActivities((previous) => {
+      const combined = newlyRemovedActivity
+        ? [...previous, newlyRemovedActivity]
+        : previous;
+
+      return combined.filter(
+        (removed) =>
+          !activities.some(
+            (activity) =>
+              activity.time === removed.time &&
+              activity.title === removed.title,
+          ),
+      );
+    });
 
     setUpdatedActivities(activities);
     setOptimized(true);
@@ -448,8 +483,8 @@ export default function DayViewScreen() {
           <Text style={styles.aiTitle}>✨ TripNest AI tip</Text>
 
           <Text style={styles.aiText}>
-            This day is designed around your family's interests while keeping
-            enough free time so the itinerary doesn't feel rushed.
+            This day is designed around your family&apos;s interests while
+            keeping enough free time so the itinerary doesn&apos;t feel rushed.
           </Text>
         </View>
 
