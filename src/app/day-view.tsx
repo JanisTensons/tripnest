@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
+import { useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -14,6 +15,42 @@ export default function DayViewScreen() {
   }>();
 
   const dayNumber = Number(day ?? 1);
+  const [showOptimization, setShowOptimization] = useState(false);
+  const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
+  const [optimized, setOptimized] = useState(false);
+
+  const optimizationOptions = [
+    {
+      id: "less-driving",
+      icon: "🚗",
+      title: "Less driving",
+      description: "Spend less time on the road",
+    },
+    {
+      id: "kids",
+      icon: "👨‍👩‍👧",
+      title: "More kids activities",
+      description: "Add more family-friendly fun",
+    },
+    {
+      id: "cheaper",
+      icon: "💰",
+      title: "Make it cheaper",
+      description: "Find budget-friendly options",
+    },
+    {
+      id: "nature",
+      icon: "🌲",
+      title: "More nature",
+      description: "Discover parks and outdoor stops",
+    },
+    {
+      id: "relaxed",
+      icon: "😌",
+      title: "More relaxed",
+      description: "Leave more time to rest",
+    },
+  ];
 
   const days = [
     {
@@ -189,9 +226,95 @@ export default function DayViewScreen() {
           ))}
         </View>
 
-        <TouchableOpacity style={styles.changeButton}>
-          <Text style={styles.changeText}>✨ Improve this day</Text>
+        <TouchableOpacity
+          style={styles.changeButton}
+          onPress={() => {
+            setShowOptimization(!showOptimization);
+            setOptimized(false);
+            setSelectedGoal(null);
+          }}
+        >
+          <Text style={styles.changeText}>
+            {showOptimization ? "Close options ↑" : "✨ Improve this day"}
+          </Text>
         </TouchableOpacity>
+
+        {showOptimization && (
+          <View style={styles.optimizationCard}>
+            <Text style={styles.optimizationTitle}>
+              How should we improve your day?
+            </Text>
+
+            <Text style={styles.optimizationSubtitle}>
+              Choose what matters most to your family.
+            </Text>
+
+            {optimizationOptions.map((option) => {
+              const selected = selectedGoal === option.id;
+
+              return (
+                <TouchableOpacity
+                  key={option.id}
+                  style={[
+                    styles.optimizationOption,
+                    selected && styles.optimizationOptionSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedGoal(option.id);
+                    setOptimized(false);
+                  }}
+                >
+                  <Text style={styles.optimizationIcon}>{option.icon}</Text>
+
+                  <View style={styles.optimizationOptionContent}>
+                    <Text style={styles.optimizationOptionTitle}>
+                      {option.title}
+                    </Text>
+                    <Text style={styles.optimizationOptionDescription}>
+                      {option.description}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.selectionMark}>
+                    {selected ? "✓" : "○"}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+
+            <TouchableOpacity
+              style={[
+                styles.applyButton,
+                !selectedGoal && styles.applyButtonDisabled,
+              ]}
+              disabled={!selectedGoal}
+              onPress={() => setOptimized(true)}
+            >
+              <Text style={styles.applyButtonText}>✨ Apply improvement</Text>
+            </TouchableOpacity>
+
+            {optimized && (
+              <View style={styles.resultCard}>
+                <Text style={styles.resultTitle}>
+                  ✓ Your preference is selected!
+                </Text>
+                <Text style={styles.resultText}>
+                  {
+                    optimizationOptions.find(
+                      (option) => option.id === selectedGoal,
+                    )?.title
+                  }
+                  {" — "}this preference is ready to be used when generating an
+                  updated itinerary.
+                </Text>
+                <Text style={styles.resultNote}>
+                  This is a UI prototype. The itinerary has not yet been changed
+                  by AI.
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -399,5 +522,113 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "700",
+  },
+  optimizationCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 18,
+    marginTop: 16,
+  },
+
+  optimizationTitle: {
+    fontSize: 19,
+    fontWeight: "800",
+    color: "#111827",
+    marginBottom: 6,
+  },
+
+  optimizationSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#6B7280",
+    marginBottom: 18,
+  },
+
+  optimizationOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+
+  optimizationOptionSelected: {
+    borderColor: "#111827",
+    backgroundColor: "#F3F4F6",
+  },
+
+  optimizationIcon: {
+    fontSize: 23,
+    marginRight: 12,
+  },
+
+  optimizationOptionContent: {
+    flex: 1,
+  },
+
+  optimizationOptionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 3,
+  },
+
+  optimizationOptionDescription: {
+    fontSize: 12,
+    color: "#6B7280",
+  },
+
+  selectionMark: {
+    fontSize: 19,
+    color: "#111827",
+    marginLeft: 8,
+  },
+
+  applyButton: {
+    height: 50,
+    borderRadius: 13,
+    backgroundColor: "#111827",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+  },
+
+  applyButtonDisabled: {
+    backgroundColor: "#9CA3AF",
+  },
+
+  applyButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+
+  resultCard: {
+    backgroundColor: "#F3F4F6",
+    borderRadius: 13,
+    padding: 14,
+    marginTop: 14,
+  },
+
+  resultTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
+    marginBottom: 7,
+  },
+
+  resultText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#374151",
+  },
+
+  resultNote: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#6B7280",
+    marginTop: 8,
   },
 });
