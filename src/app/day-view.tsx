@@ -173,72 +173,168 @@ export default function DayViewScreen() {
     }));
 
     switch (selectedGoal) {
-      case "less-driving":
-        activities = activities.filter(
-          (activity) => activity.type !== "Travel" || activity.time !== "12:00",
-        );
-
-        setOptimizationMessage(
-          "Your plan now has fewer scheduled stops. Actual driving time has not been recalculated.",
-        );
-        break;
-
-      case "kids":
-        activities.push({
-          time: "15:30",
-          title: "Family playground break",
-          type: "Kids activity",
-          icon: "🛝",
-        });
-
-        activities.sort((a, b) => a.time.localeCompare(b.time));
-
-        setOptimizationMessage(
-          "A family-friendly activity has been added to your plan.",
-        );
-        break;
-
-      case "cheaper":
-        activities = activities.map((activity) =>
-          activity.title === "Dinner in Gamla Stan"
-            ? {
-                time: activity.time,
-                title: "Budget-friendly picnic dinner",
-                type: "Food",
-                icon: "🥪",
-              }
-            : activity,
-        );
-
-        setOptimizationMessage(
-          "The plan now suggests a picnic instead of the restaurant dinner, where applicable.",
-        );
-        break;
-
-      case "nature":
-        activities.push({
-          time: "15:30",
-          title: "Nature walk in a nearby park",
-          type: "Nature",
-          icon: "🌲",
-        });
-
-        activities.sort((a, b) => a.time.localeCompare(b.time));
-
-        setOptimizationMessage(
-          "A nature walk has been added. Check the timing and location before your trip.",
-        );
-        break;
-
-      case "relaxed":
-        if (activities.length > 3) {
-          activities = activities.slice(0, -1);
+      case "less-driving": {
+        if (dayNumber === 1) {
+          setOptimizationMessage(
+            "This day is centred around the ferry journey. Keep the ferry schedule unchanged and avoid adding extra travel stops.",
+          );
+        } else if (dayNumber === 2) {
+          setOptimizationMessage(
+            "Group nearby Stockholm attractions together and choose activities close to each other to reduce driving around the city.",
+          );
+        } else if (dayNumber === 3) {
+          setOptimizationMessage(
+            "The Stockholm–Gothenburg drive is approximately 4 h 50 min. Keep the route direct and check whether any optional stops can be skipped. Actual driving time has not been recalculated.",
+          );
+        } else {
+          setOptimizationMessage(
+            "Keep the route direct and avoid unnecessary stops. Actual driving time has not been recalculated.",
+          );
         }
 
-        setOptimizationMessage(
-          "One scheduled activity has been removed where possible, leaving more free time.",
-        );
         break;
+      }
+
+      case "kids": {
+        const alreadyHasKidsActivity = activities.some(
+          (activity) => activity.type === "Kids activity",
+        );
+
+        if (alreadyHasKidsActivity) {
+          setOptimizationMessage(
+            "This day already includes a kids activity. Keep it in your plan and allow enough time for the family to enjoy it.",
+          );
+        } else if (dayNumber === 1) {
+          activities.push({
+            time: "20:00",
+            title: "Family games on board",
+            type: "Kids activity",
+            icon: "🎲",
+          });
+
+          activities.sort((a, b) => a.time.localeCompare(b.time));
+
+          setOptimizationMessage(
+            "A family-friendly activity has been added for the ferry journey.",
+          );
+        } else {
+          activities.push({
+            time: "15:30",
+            title: "Family playground break",
+            type: "Kids activity",
+            icon: "🛝",
+          });
+
+          activities.sort((a, b) => a.time.localeCompare(b.time));
+
+          setOptimizationMessage(
+            "A family-friendly activity has been added to your plan. Check travel time and opening hours before your trip.",
+          );
+        }
+
+        break;
+      }
+
+      case "cheaper": {
+        const dinnerIndex = activities.findIndex(
+          (activity) =>
+            activity.type === "Food" &&
+            (activity.title.toLowerCase().includes("dinner") ||
+              activity.title.toLowerCase().includes("lunch")),
+        );
+
+        if (dinnerIndex !== -1) {
+          const originalActivity = activities[dinnerIndex];
+
+          activities[dinnerIndex] = {
+            ...originalActivity,
+            title: originalActivity.title.toLowerCase().includes("lunch")
+              ? "Budget-friendly picnic lunch"
+              : "Budget-friendly picnic dinner",
+            icon: "🥪",
+          };
+
+          setOptimizationMessage(
+            "A meal has been replaced with a budget-friendly picnic suggestion. Actual savings have not been calculated.",
+          );
+        } else {
+          activities.push({
+            time: "12:30",
+            title: "Bring your own snacks and drinks",
+            type: "Budget tip",
+            icon: "💰",
+          });
+
+          activities.sort((a, b) => a.time.localeCompare(b.time));
+
+          setOptimizationMessage(
+            "A budget tip has been added. Bringing your own snacks and drinks may help reduce food costs.",
+          );
+        }
+
+        break;
+      }
+
+      case "nature": {
+        const alreadyHasNature = activities.some(
+          (activity) => activity.type === "Nature",
+        );
+
+        if (alreadyHasNature) {
+          setOptimizationMessage(
+            "Your plan already includes a nature activity. Keep it and allow enough time to enjoy the outdoors.",
+          );
+        } else if (dayNumber === 1) {
+          activities.push({
+            time: "20:00",
+            title: "Relax on deck and enjoy the sea views",
+            type: "Nature",
+            icon: "🌊",
+          });
+
+          activities.sort((a, b) => a.time.localeCompare(b.time));
+
+          setOptimizationMessage(
+            "A sea-view break has been added to your ferry day.",
+          );
+        } else if (dayNumber === 2) {
+          activities.push({
+            time: "15:30",
+            title: "Relaxing walk in a Stockholm park",
+            type: "Nature",
+            icon: "🌳",
+          });
+
+          activities.sort((a, b) => a.time.localeCompare(b.time));
+
+          setOptimizationMessage(
+            "A nature break has been added to your Stockholm day. Check the location and travel time before your trip.",
+          );
+        } else {
+          activities.push({
+            time: "14:00",
+            title: "Scenic nature break along the route",
+            type: "Nature",
+            icon: "🌲",
+          });
+
+          activities.sort((a, b) => a.time.localeCompare(b.time));
+
+          setOptimizationMessage(
+            "A nature break has been added to your road-trip plan. Confirm that the stop fits your route before travelling.",
+          );
+        }
+
+        break;
+      }
+
+      case "relaxed": {
+        setOptimizationMessage(
+          "Your plan keeps its main activities and meal breaks. To make the day more relaxed, leave extra free time between activities and avoid adding optional stops.",
+        );
+
+        break;
+      }
     }
 
     setUpdatedActivities(activities);
@@ -299,7 +395,7 @@ export default function DayViewScreen() {
               <View style={styles.timelineLine}>
                 <View style={styles.dot} />
 
-                {index < currentDay.activities.length - 1 && (
+                {index < displayedActivities.length - 1 && (
                   <View style={styles.line} />
                 )}
               </View>
