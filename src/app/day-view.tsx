@@ -4,6 +4,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -118,7 +119,7 @@ export default function DayViewScreen() {
           priority: "important",
         },
         {
-          time: "14:00",
+          time: "11:30",
           title: "Junibacken",
           type: "Kids activity",
           icon: "🎠",
@@ -188,6 +189,71 @@ export default function DayViewScreen() {
   );
 
   const [optimizationMessage, setOptimizationMessage] = useState("");
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [lastDeletedActivity, setLastDeletedActivity] =
+    useState<Activity | null>(null);
+  const [editTime, setEditTime] = useState("09:00");
+  const [editDuration, setEditDuration] = useState("60");
+
+  function startEditing(activity: Activity, index: number) {
+    setEditingIndex(index);
+    setEditTime(activity.time);
+    setEditDuration(String(activity.durationMinutes ?? 60));
+  }
+
+  function saveActivityEdit() {
+    if (editingIndex === null) return;
+
+    const validTime = /^([01]\d|2[0-3]):([0-5]\d)$/.test(editTime);
+    const duration = Number(editDuration);
+
+    if (
+      !validTime ||
+      !Number.isInteger(duration) ||
+      duration < 1 ||
+      duration > 1440
+    ) {
+      return;
+    }
+
+    const activities = [...displayedActivities];
+
+    activities[editingIndex] = {
+      ...activities[editingIndex],
+      time: editTime,
+      durationMinutes: duration,
+    };
+
+    activities.sort((a, b) => a.time.localeCompare(b.time));
+
+    setUpdatedActivities(activities);
+    setEditingIndex(null);
+    setOptimized(false);
+    setOptimizationMessage("");
+  }
+  function deleteActivity(index: number) {
+    const activities = [...displayedActivities];
+    const [deletedActivity] = activities.splice(index, 1);
+
+    if (!deletedActivity) return;
+
+    setLastDeletedActivity(deletedActivity);
+    setUpdatedActivities(activities);
+    setEditingIndex(null);
+    setOptimized(false);
+    setOptimizationMessage("");
+  }
+
+  function undoDeleteActivity() {
+    if (!lastDeletedActivity) return;
+
+    const activities = [...displayedActivities, lastDeletedActivity];
+
+    activities.sort((a, b) => a.time.localeCompare(b.time));
+
+    setUpdatedActivities(activities);
+    setLastDeletedActivity(null);
+  }
 
   const displayedActivities = updatedActivities ?? currentDay.activities;
 
@@ -391,13 +457,94 @@ export default function DayViewScreen() {
                   </Text>
                 )}
 
-                <TouchableOpacity>
-                  <Text style={styles.details}>View details →</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: "row", gap: 16 }}>
+                  <TouchableOpacity
+                    onPress={() => startEditing(activity, index)}
+                  >
+                    <Text style={styles.details}>✏️ Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => deleteActivity(index)}>
+                    <Text style={{ color: "#DC2626", fontWeight: "600" }}>
+                      Delete
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity>
+                    <Text style={styles.details}>View details →</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           ))}
         </View>
+        {editingIndex !== null && (
+          <View style={styles.optimizationCard}>
+            <Text style={styles.optimizationTitle}>Edit activity</Text>
+
+            <Text style={styles.optimizationSubtitle}>
+              Update the start time and duration.
+            </Text>
+
+            <Text style={styles.optimizationOptionTitle}>
+              Start time (HH:MM)
+            </Text>
+
+            <TextInput
+              value={editTime}
+              onChangeText={setEditTime}
+              placeholder="10:30"
+              keyboardType="numbers-and-punctuation"
+              maxLength={5}
+              style={styles.editInput}
+            />
+
+            <Text style={styles.optimizationOptionTitle}>
+              Duration (minutes)
+            </Text>
+
+            <TextInput
+              value={editDuration}
+              onChangeText={setEditDuration}
+              placeholder="60"
+              keyboardType="number-pad"
+              style={styles.editInput}
+            />
+
+            <TouchableOpacity
+              style={styles.applyButton}
+              onPress={saveActivityEdit}
+            >
+              <Text style={styles.applyButtonText}>Save changes</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setEditingIndex(null)}
+            >
+              <Text style={styles.details}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {lastDeletedActivity && (
+          <View
+            style={{
+              backgroundColor: "#F3F4F6",
+              borderRadius: 12,
+              padding: 14,
+              marginBottom: 16,
+            }}
+          >
+            <Text style={{ color: "#374151", marginBottom: 8 }}>
+              Deleted: {lastDeletedActivity.title}
+            </Text>
+
+            <TouchableOpacity onPress={undoDeleteActivity}>
+              <Text style={{ color: "#111827", fontWeight: "700" }}>
+                ↶ Undo delete
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
         {removedActivities.length > 0 && (
           <View style={styles.removedSection}>
             <Text style={styles.removedTitle}>Removed by optimization</Text>
@@ -852,5 +999,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#64748b",
     textDecorationLine: "line-through",
+  },
+  editInput: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#111827",
+    marginTop: 8,
+    marginBottom: 16,
+    backgroundColor: "#FFFFFF",
+  },
+
+  cancelButton: {
+    alignItems: "center",
+    paddingVertical: 12,
   },
 });
