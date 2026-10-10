@@ -1,5 +1,6 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -9,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { getAiTip } from "../utils/ai-tips";
 
 import {
   findScheduleConflicts,
@@ -35,6 +37,9 @@ export default function DayViewScreen() {
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
   const [optimized, setOptimized] = useState(false);
   const [removedActivities, setRemovedActivities] = useState<Activity[]>([]);
+  const [removedActivitiesLoadedDay, setRemovedActivitiesLoadedDay] = useState<
+    number | null
+  >(null);
 
   const optimizationOptions = [
     {
@@ -119,10 +124,11 @@ export default function DayViewScreen() {
           priority: "important",
         },
         {
-          time: "11:30",
+          time: "12:30",
           title: "Junibacken",
           type: "Kids activity",
           icon: "🎠",
+          durationMinutes: 120,
           priority: "important",
         },
         {
@@ -184,16 +190,136 @@ export default function DayViewScreen() {
   const [updatedActivities, setUpdatedActivities] = useState<Activity[] | null>(
     null,
   );
+  const [loadedDayNumber, setLoadedDayNumber] = useState<number | null>(null);
   const scheduleConflicts = findScheduleConflicts(
     updatedActivities ?? currentDay.activities,
   );
 
   const [optimizationMessage, setOptimizationMessage] = useState("");
+  const aiTip = getAiTip(updatedActivities ?? currentDay.activities);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [lastDeletedActivity, setLastDeletedActivity] =
     useState<Activity | null>(null);
   const [editTime, setEditTime] = useState("09:00");
   const [editDuration, setEditDuration] = useState("60");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadActivities() {
+      try {
+        const stored = await AsyncStorage.getItem(
+          `tripnest-activities-${dayNumber}`,
+        );
+
+        if (cancelled) return;
+
+        if (stored !== null) {
+          const parsed: unknown = JSON.parse(stored);
+
+          if (Array.isArray(parsed)) {
+            setUpdatedActivities(parsed as Activity[]);
+          } else {
+            setUpdatedActivities(null);
+          }
+        } else {
+          setUpdatedActivities(null);
+        }
+      } catch (error) {
+        console.error("Neizdevās ielādēt maršrutu:", error);
+
+        if (!cancelled) {
+          setUpdatedActivities(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadedDayNumber(dayNumber);
+        }
+      }
+    }
+
+    void loadActivities();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dayNumber]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRemovedActivities() {
+      try {
+        const stored = await AsyncStorage.getItem(
+          `tripnest-removed-activities-${dayNumber}`,
+        );
+
+        if (cancelled) return;
+
+        if (stored !== null) {
+          const parsed: unknown = JSON.parse(stored);
+
+          setRemovedActivities(
+            Array.isArray(parsed) ? (parsed as Activity[]) : [],
+          );
+        } else {
+          setRemovedActivities([]);
+        }
+      } catch (error) {
+        console.error("Neizdevās ielādēt noņemtās aktivitātes:", error);
+
+        if (!cancelled) {
+          setRemovedActivities([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setRemovedActivitiesLoadedDay(dayNumber);
+        }
+      }
+    }
+
+    void loadRemovedActivities();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dayNumber]);
+
+  useEffect(() => {
+    if (removedActivitiesLoadedDay !== dayNumber) return;
+
+    const key = `tripnest-removed-activities-${dayNumber}`;
+
+    async function saveRemovedActivities() {
+      try {
+        await AsyncStorage.setItem(key, JSON.stringify(removedActivities));
+      } catch (error) {
+        console.error("Neizdevās saglabāt noņemtās aktivitātes:", error);
+      }
+    }
+
+    void saveRemovedActivities();
+  }, [removedActivities, removedActivitiesLoadedDay, dayNumber]);
+
+  useEffect(() => {
+    if (loadedDayNumber !== dayNumber) return;
+
+    const key = `tripnest-activities-${dayNumber}`;
+
+    async function saveActivities() {
+      try {
+        if (updatedActivities === null) {
+          await AsyncStorage.removeItem(key);
+        } else {
+          await AsyncStorage.setItem(key, JSON.stringify(updatedActivities));
+        }
+      } catch (error) {
+        console.error("Neizdevās saglabāt maršrutu:", error);
+      }
+    }
+
+    void saveActivities();
+  }, [updatedActivities, loadedDayNumber, dayNumber]);
 
   function startEditing(activity: Activity, index: number) {
     setEditingIndex(index);
@@ -265,7 +391,6 @@ export default function DayViewScreen() {
       selectedGoal as OptimizationGoal,
       dayNumber,
     );
-
     setOptimizationMessage(result.message);
 
     setRemovedActivities((previous) => {
@@ -289,6 +414,12 @@ export default function DayViewScreen() {
 
     setUpdatedActivities(result.activities);
     setOptimized(true);
+
+    if (!result.changed) {
+      setOptimizationMessage(
+        "No changes were made to your itinerary. Your current plan has been preserved.",
+      );
+    }
   }
 
   function applyConflictSuggestion(
@@ -337,11 +468,7 @@ export default function DayViewScreen() {
 
         <View style={styles.aiCard}>
           <Text style={styles.aiTitle}>✨ TripNest AI tip</Text>
-
-          <Text style={styles.aiText}>
-            This day is designed around your family&apos;s interests while
-            keeping enough free time so the itinerary doesn&apos;t feel rushed.
-          </Text>
+          <Text style={styles.aiText}>{aiTip}</Text>
         </View>
 
         <Text style={styles.sectionTitle}>Your day</Text>
@@ -648,9 +775,14 @@ export default function DayViewScreen() {
             {optimized && (
               <View style={styles.resultCard}>
                 <Text style={styles.resultTitle}>
-                  ✓ Your day plan has been updated
+                  {optimizationMessage ===
+                  "No changes were made to your itinerary. Your current plan has been preserved."
+                    ? "ℹ️ No changes made"
+                    : "✓ Your day plan has been updated"}
                 </Text>
+
                 <Text style={styles.resultText}>{optimizationMessage}</Text>
+
                 <Text style={styles.resultNote}>
                   This is a UI prototype. The itinerary has not yet been changed
                   by AI.

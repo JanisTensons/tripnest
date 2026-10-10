@@ -21,7 +21,82 @@ type OptimizationResult = {
   activities: Activity[];
   newlyRemovedActivity: Activity | null;
   message: string;
+  changed: boolean;
 };
+
+function overlapsExistingActivity(
+  candidate: Activity,
+  existingActivities: Activity[],
+): boolean {
+  const candidateStart = timeToMinutes(candidate.time);
+  const candidateDuration = candidate.durationMinutes;
+
+  if (candidateStart === null || !candidateDuration || candidateDuration <= 0) {
+    return false;
+  }
+
+  const candidateEnd = candidateStart + candidateDuration;
+
+  return existingActivities.some((activity) => {
+    const existingStart = timeToMinutes(activity.time);
+    const existingDuration = activity.durationMinutes;
+
+    if (existingStart === null || !existingDuration || existingDuration <= 0) {
+      return false;
+    }
+
+    const existingEnd = existingStart + existingDuration;
+
+    return candidateStart < existingEnd && candidateEnd > existingStart;
+  });
+}
+
+function findAvailableTime(
+  candidate: Activity,
+  existingActivities: Activity[],
+): string | null {
+  const duration = candidate.durationMinutes;
+
+  if (!duration || duration <= 0) {
+    return null;
+  }
+
+  const preferredStart = timeToMinutes(candidate.time);
+
+  if (preferredStart === null) {
+    return null;
+  }
+
+  // Try the preferred time first, then search in 30-minute increments.
+  const candidates = [
+    preferredStart,
+    ...Array.from({ length: 24 }, (_, index) => {
+      const offset = (index + 1) * 30;
+      return preferredStart + offset;
+    }),
+    ...Array.from({ length: 24 }, (_, index) => {
+      const offset = (index + 1) * 30;
+      return preferredStart - offset;
+    }),
+  ];
+
+  for (const start of candidates) {
+    if (start < 6 * 60 || start + duration > 22 * 60) {
+      continue;
+    }
+
+    const proposedActivity = {
+      ...candidate,
+      time: minutesToTime(start),
+    };
+
+    if (!overlapsExistingActivity(proposedActivity, existingActivities)) {
+      return proposedActivity.time;
+    }
+  }
+
+  return null;
+}
 
 export function optimizeItinerary(
   currentActivities: Activity[],
@@ -35,6 +110,11 @@ export function optimizeItinerary(
   let newlyRemovedActivity: Activity | null = null;
   let message = "";
 
+  const addedActivities: Activity[] = [];
+  function addActivity(activity: Activity) {
+    activities.push(activity);
+    addedActivities.push(activity);
+  }
   switch (goal) {
     case "less-driving": {
       const index = activities.findIndex(
@@ -61,11 +141,12 @@ export function optimizeItinerary(
         message =
           "This day already includes a kids activity. Keep it in your plan and allow enough time for the family to enjoy it.";
       } else if (dayNumber === 1) {
-        activities.push({
+        addActivity({
           time: "20:00",
           title: "Family games on board",
           type: "Kids activity",
           icon: "🎲",
+          durationMinutes: 60,
           optional: true,
           priority: "optional",
           source: "optimization",
@@ -73,11 +154,12 @@ export function optimizeItinerary(
         message =
           "A family-friendly activity has been added for the ferry journey.";
       } else {
-        activities.push({
+        addActivity({
           time: "15:30",
           title: "Family playground break",
           type: "Kids activity",
           icon: "🛝",
+          durationMinutes: 60,
           optional: true,
           priority: "optional",
           source: "optimization",
@@ -123,11 +205,12 @@ export function optimizeItinerary(
 
         message = `"${original.title}" was changed to "${newTitle}". This is a budget-friendly alternative; actual savings have not been calculated.`;
       } else {
-        activities.push({
+        addActivity({
           time: "12:30",
           title: "Bring your own snacks and drinks",
           type: "Budget tip",
           icon: "💰",
+          durationMinutes: 60,
           optional: true,
           priority: "optional",
           source: "optimization",
@@ -144,22 +227,24 @@ export function optimizeItinerary(
         message =
           "Your plan already includes a nature activity. Keep it and allow enough time to enjoy the outdoors.";
       } else if (dayNumber === 1) {
-        activities.push({
+        addActivity({
           time: "20:00",
           title: "Relax on deck and enjoy the sea views",
           type: "Nature",
           icon: "🌊",
+          durationMinutes: 60,
           optional: true,
           priority: "optional",
           source: "optimization",
         });
         message = "A sea-view break has been added to your ferry day.";
       } else if (dayNumber === 2) {
-        activities.push({
+        addActivity({
           time: "15:30",
           title: "Relaxing walk in a Stockholm park",
           type: "Nature",
           icon: "🌳",
+          durationMinutes: 60,
           optional: true,
           priority: "optional",
           source: "optimization",
@@ -167,11 +252,12 @@ export function optimizeItinerary(
         message =
           "A nature break has been added to your Stockholm day. Check the location and travel time before your trip.";
       } else {
-        activities.push({
+        addActivity({
           time: "14:00",
           title: "Scenic nature break along the route",
           type: "Nature",
           icon: "🌲",
+          durationMinutes: 60,
           optional: true,
           requiresTravel: true,
           priority: "optional",
@@ -205,12 +291,36 @@ export function optimizeItinerary(
     }
   }
 
+  const addedActivity = addedActivities[addedActivities.length - 1];
+
+  if (addedActivity) {
+    const existingActivities = activities.filter(
+      (activity) => activity !== addedActivity,
+    );
+
+    const availableTime = findAvailableTime(addedActivity, existingActivities);
+
+    if (availableTime === null) {
+      activities = activities.filter((activity) => activity !== addedActivity);
+
+      message = `The suggested activity "${addedActivity.title}" was not added because no suitable free time was found.`;
+    } else if (availableTime !== addedActivity.time) {
+      addedActivity.time = availableTime;
+
+      message = `"${addedActivity.title}" was scheduled for ${availableTime} to avoid overlapping with another activity.`;
+    }
+  }
+
   activities.sort((a, b) => a.time.localeCompare(b.time));
+
+  const changed =
+    JSON.stringify(currentActivities) !== JSON.stringify(activities);
 
   return {
     activities,
     newlyRemovedActivity,
     message,
+    changed,
   };
 }
 
@@ -221,7 +331,7 @@ export type ScheduleConflict = {
   secondStartsAt: string;
 };
 
-function timeToMinutes(time: string): number | null {
+export function timeToMinutes(time: string): number | null {
   const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
 
   if (!match) {
